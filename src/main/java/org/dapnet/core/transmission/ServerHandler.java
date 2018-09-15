@@ -14,6 +14,7 @@ import org.dapnet.core.transmission.TransmissionSettings.PagingProtocolSettings;
 import org.dapnet.core.transmission.TransmitterClient.AckType;
 import org.jgroups.stack.IpAddress;
 
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -164,7 +165,10 @@ class ServerHandler extends SimpleChannelInboundHandler<String> {
 	private void handleAuth(ChannelHandlerContext ctx, String msg) throws Exception {
 		Matcher authMatcher = AUTH_PATTERN.matcher(msg);
 		if (!authMatcher.matches()) {
-			throw new TransmitterException("Invalid welcome message format: " + msg);
+                        logger.error("Invalid welcome message format: " + msg);
+                        ctx.writeAndFlush("07 Invalid welcom message format").addListener(ChannelFutureListener.CLOSE);
+                        return;
+//			throw new TransmitterException("Invalid welcome message format: " + msg);
 		}
 
 		String type = authMatcher.group(1);
@@ -174,17 +178,20 @@ class ServerHandler extends SimpleChannelInboundHandler<String> {
 
 		Transmitter t = manager.getTransmitter(name);
 		if (t == null) {
-			throw new TransmitterException("The transmitter name is not registered: " + name);
+                        logger.error("The transmitter name is not registered: " + name);
+                        ctx.writeAndFlush("07 Transmitter not registered").addListener(ChannelFutureListener.CLOSE);
+                        return;
+//			throw new TransmitterException("The transmitter name is not registered: " + name);
 		} else if (t.getStatus() == Status.DISABLED) {
 			logger.error("Transmitter is disabled and not allowed to connect: " + name);
-			ctx.close();
+			ctx.writeAndFlush("07 Transmitter disabled").addListener(ChannelFutureListener.CLOSE);
 			return;
 		}
 
 		// Test authentication key
 		if (!t.getAuthKey().equals(key)) {
 			logger.error("Wrong authentication key supplied for transmitter: " + name);
-			ctx.close();
+			ctx.writeAndFlush("07 Invalid credentials").addListener(ChannelFutureListener.CLOSE);
 			return;
 		}
 
